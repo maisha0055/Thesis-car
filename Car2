@@ -4,36 +4,26 @@
 #define RIGHT_FORWARD 11
 #define RIGHT_REVERSE 12
 
-// Speed encoder pins (using interrupt-capable pins on Arduino Uno)
-#define ENCODER_1 2  // Front Left wheel
-#define ENCODER_2 3  // Front Right wheel
-#define ENCODER_3 18 // Rear Left wheel (A4 as digital pin 18)
-#define ENCODER_4 19 // Rear Right wheel (A5 as digital pin 19)
+// Speed encoder pins (only using pins 2 and 3 - Arduino Uno's interrupt pins)
+#define ENCODER_LEFT 2   // Left side encoder
+#define ENCODER_RIGHT 3  // Right side encoder
 
 // Variables for Bluetooth control
 char t;
 
 // Variables for speed measurement
-unsigned int rpm1, rpm2, rpm3, rpm4;
-volatile byte pulses1, pulses2, pulses3, pulses4;
+unsigned int rpmLeft, rpmRight;
+volatile byte pulsesLeft, pulsesRight;
 unsigned long TIME;
 unsigned int pulse_per_turn = 20; // Adjust based on your encoder disc slots
 
 // Interrupt service routines for counting encoder pulses
-void count1() {
-  pulses1++;
+void countLeft() {
+  pulsesLeft++;
 }
 
-void count2() {
-  pulses2++;
-}
-
-void count3() {
-  pulses3++;
-}
-
-void count4() {
-  pulses4++;
+void countRight() {
+  pulsesRight++;
 }
 
 void setup() {
@@ -44,30 +34,29 @@ void setup() {
   pinMode(RIGHT_REVERSE, OUTPUT);
   
   // Speed encoder pins setup
-  pinMode(ENCODER_1, INPUT);
-  pinMode(ENCODER_2, INPUT);
-  pinMode(ENCODER_3, INPUT);
-  pinMode(ENCODER_4, INPUT);
+  pinMode(ENCODER_LEFT, INPUT);
+  pinMode(ENCODER_RIGHT, INPUT);
   
   // Initialize variables
-  rpm1 = rpm2 = rpm3 = rpm4 = 0;
-  pulses1 = pulses2 = pulses3 = pulses4 = 0;
+  rpmLeft = rpmRight = 0;
+  pulsesLeft = pulsesRight = 0;
   TIME = 0;
   
   // Serial communication for Bluetooth
   Serial.begin(9600);
   
-  // Attach interrupts for all speed encoders
-  attachInterrupt(digitalPinToInterrupt(ENCODER_1), count1, FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_2), count2, FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_3), count3, FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_4), count4, FALLING);
+  // Attach interrupts for speed encoders
+  attachInterrupt(digitalPinToInterrupt(ENCODER_LEFT), countLeft, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_RIGHT), countRight, FALLING);
+  
+  Serial.println("Car initialized!");
 }
 
 void loop() {
   // Handle Bluetooth commands
   if (Serial.available()) {
     t = Serial.read();
+    Serial.print("Command received: ");
     Serial.println(t);
   }
   
@@ -78,22 +67,22 @@ void loop() {
     digitalWrite(RIGHT_FORWARD, HIGH);
     digitalWrite(RIGHT_REVERSE, LOW);
   }
-  else if (t == '2') {  // Move reverse
+  else if (t == '2') {  // Move reverse/backward
     digitalWrite(LEFT_FORWARD, LOW);
     digitalWrite(LEFT_REVERSE, HIGH);
     digitalWrite(RIGHT_FORWARD, LOW);
     digitalWrite(RIGHT_REVERSE, HIGH);
   }
   else if (t == '3') {  // Turn right
-    digitalWrite(LEFT_FORWARD, LOW);
-    digitalWrite(LEFT_REVERSE, LOW);
-    digitalWrite(RIGHT_FORWARD, HIGH);
-    digitalWrite(RIGHT_REVERSE, LOW);
-  }
-  else if (t == '4') {  // Turn left
     digitalWrite(LEFT_FORWARD, HIGH);
     digitalWrite(LEFT_REVERSE, LOW);
     digitalWrite(RIGHT_FORWARD, LOW);
+    digitalWrite(RIGHT_REVERSE, LOW);
+  }
+  else if (t == '4') {  // Turn left
+    digitalWrite(LEFT_FORWARD, LOW);
+    digitalWrite(LEFT_REVERSE, LOW);
+    digitalWrite(RIGHT_FORWARD, HIGH);
     digitalWrite(RIGHT_REVERSE, LOW);
   }
   else if (t == '5') {  // Stop
@@ -105,40 +94,30 @@ void loop() {
   
   // Speed measurement (updates every 100ms)
   if (millis() - TIME >= 100) {
-    // Detach all interrupts
-    detachInterrupt(digitalPinToInterrupt(ENCODER_1));
-    detachInterrupt(digitalPinToInterrupt(ENCODER_2));
-    detachInterrupt(digitalPinToInterrupt(ENCODER_3));
-    detachInterrupt(digitalPinToInterrupt(ENCODER_4));
+    // Detach interrupts temporarily
+    detachInterrupt(digitalPinToInterrupt(ENCODER_LEFT));
+    detachInterrupt(digitalPinToInterrupt(ENCODER_RIGHT));
     
     unsigned long timeDiff = millis() - TIME;
     
-    // Calculate RPM for all encoders
-    rpm1 = (60 * 100 / pulse_per_turn) / timeDiff * pulses1;
-    rpm2 = (60 * 100 / pulse_per_turn) / timeDiff * pulses2;
-    rpm3 = (60 * 100 / pulse_per_turn) / timeDiff * pulses3;
-    rpm4 = (60 * 100 / pulse_per_turn) / timeDiff * pulses4;
+    // Calculate RPM for both encoders
+    rpmLeft = (60 * 100 / pulse_per_turn) / timeDiff * pulsesLeft;
+    rpmRight = (60 * 100 / pulse_per_turn) / timeDiff * pulsesRight;
     
     TIME = millis();
     
     // Reset pulse counters
-    pulses1 = pulses2 = pulses3 = pulses4 = 0;
+    pulsesLeft = pulsesRight = 0;
     
     // Print RPM to Serial
-    Serial.print("FL: ");
-    Serial.print(rpm1);
-    Serial.print(" | FR: ");
-    Serial.print(rpm2);
-    Serial.print(" | RL: ");
-    Serial.print(rpm3);
-    Serial.print(" | RR: ");
-    Serial.println(rpm4);
+    Serial.print("Left RPM: ");
+    Serial.print(rpmLeft);
+    Serial.print(" | Right RPM: ");
+    Serial.println(rpmRight);
     
-    // Re-attach all interrupts
-    attachInterrupt(digitalPinToInterrupt(ENCODER_1), count1, FALLING);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_2), count2, FALLING);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_3), count3, FALLING);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_4), count4, FALLING);
+    // Re-attach interrupts
+    attachInterrupt(digitalPinToInterrupt(ENCODER_LEFT), countLeft, FALLING);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_RIGHT), countRight, FALLING);
   }
   
   delay(100);
