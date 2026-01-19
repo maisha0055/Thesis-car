@@ -1,0 +1,103 @@
+// Motor control pins
+#define LEFT_FORWARD 9
+#define LEFT_REVERSE 10
+#define RIGHT_FORWARD 11
+#define RIGHT_REVERSE 12
+
+// Speed encoder pin
+#define ENCODER 2
+
+// Variables for Bluetooth control
+char t;
+
+// Variables for speed measurement
+unsigned int rpm;
+volatile byte pulses;
+unsigned long TIME;
+unsigned int pulse_per_turn = 20; // Adjust based on your encoder disc slots
+
+// Interrupt service routine for counting encoder pulses
+void count() {
+  pulses++;
+}
+
+void setup() {
+  // Motor pins setup
+  pinMode(LEFT_FORWARD, OUTPUT);
+  pinMode(LEFT_REVERSE, OUTPUT);
+  pinMode(RIGHT_FORWARD, OUTPUT);
+  pinMode(RIGHT_REVERSE, OUTPUT);
+  
+  // Speed encoder setup
+  pinMode(ENCODER, INPUT);
+  
+  // Initialize variables
+  rpm = 0;
+  pulses = 0;
+  TIME = 0;
+  
+  // Serial communication for Bluetooth
+  Serial.begin(9600);
+  
+  // Attach interrupt for speed measurement
+  attachInterrupt(digitalPinToInterrupt(ENCODER), count, FALLING);
+}
+
+void loop() {
+  // Handle Bluetooth commands
+  if (Serial.available()) {
+    t = Serial.read();
+    Serial.println(t);
+  }
+  
+  // Motor control based on Bluetooth command
+  if (t == '1') {  // Move forward
+    digitalWrite(LEFT_FORWARD, HIGH);
+    digitalWrite(LEFT_REVERSE, LOW);
+    digitalWrite(RIGHT_FORWARD, HIGH);
+    digitalWrite(RIGHT_REVERSE, LOW);
+  }
+  else if (t == '2') {  // Move reverse
+    digitalWrite(LEFT_FORWARD, LOW);
+    digitalWrite(LEFT_REVERSE, HIGH);
+    digitalWrite(RIGHT_FORWARD, LOW);
+    digitalWrite(RIGHT_REVERSE, HIGH);
+  }
+  else if (t == '3') {  // Turn right
+    digitalWrite(LEFT_FORWARD, LOW);
+    digitalWrite(LEFT_REVERSE, LOW);
+    digitalWrite(RIGHT_FORWARD, HIGH);
+    digitalWrite(RIGHT_REVERSE, LOW);
+  }
+  else if (t == '4') {  // Turn left
+    digitalWrite(LEFT_FORWARD, HIGH);
+    digitalWrite(LEFT_REVERSE, LOW);
+    digitalWrite(RIGHT_FORWARD, LOW);
+    digitalWrite(RIGHT_REVERSE, LOW);
+  }
+  else if (t == '5') {  // Stop
+    digitalWrite(LEFT_FORWARD, LOW);
+    digitalWrite(LEFT_REVERSE, LOW);
+    digitalWrite(RIGHT_FORWARD, LOW);
+    digitalWrite(RIGHT_REVERSE, LOW);
+  }
+  
+  // Speed measurement (updates every 100ms)
+  if (millis() - TIME >= 100) {
+    detachInterrupt(digitalPinToInterrupt(ENCODER));
+    
+    // Calculate RPM
+    rpm = (60 * 100 / pulse_per_turn) / (millis() - TIME) * pulses;
+    TIME = millis();
+    pulses = 0;
+    
+    // Print RPM to Serial
+    Serial.print("RPM: ");
+    Serial.println(rpm);
+    
+    // Re-attach interrupt
+    attachInterrupt(digitalPinToInterrupt(ENCODER), count, FALLING);
+  }
+  
+  delay(100);
+}
